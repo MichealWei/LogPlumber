@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 )
@@ -40,10 +43,15 @@ func addCLICommands(app *cli.App) {
 			Action: func(cnx *cli.Context) error {
 				logPath := cnx.Args().Get(0)
 				if !isFolderExist(logPath) {
-					fmt.Println("folder does not exist, please try again")
+					fmt.Println("target folder does not exist, please try again")
 					os.Exit(1)
 				}
 				fmt.Println("it works")
+				if !isFolderExist(currentLogFolder) {
+					fmt.Println("log folder does not exist, please try again")
+					os.Exit(1)
+				}
+				processLogDir(currentLogFolder)
 				return nil
 			},
 		},
@@ -75,4 +83,22 @@ func isFolderExist(path string) bool {
 		return false
 	}
 	return true
+}
+
+func processLogDir(logDir string) {
+
+	err := filepath.Walk(logDir,
+		func(path string, info os.FileInfo, err error) error {
+			if info.IsDir() {
+				return errors.New("item is not a file, please check your log directory")
+			}
+			if !strings.HasSuffix(info.Name(), "log") {
+
+			}
+			return nil
+		})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
