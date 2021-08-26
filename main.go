@@ -1,16 +1,22 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 )
+
+var lastTime time.Time
+var currentTime time.Time
+
+const currentLogFolder = "/home/mike/.chia/mainnet/log/"
+
 
 func initCLI() *cli.App {
 
@@ -89,11 +95,15 @@ func processLogDir(logDir string) {
 
 	err := filepath.Walk(logDir,
 		func(path string, info os.FileInfo, err error) error {
-			if info.IsDir() {
-				return errors.New("item is not a file, please check your log directory")
+			if err != nil {
+				return err
 			}
-			if !strings.HasSuffix(info.Name(), "log") {
-
+			if strings.HasSuffix(info.Name(), "log") || strings.HasSuffix(info.Name(), "lock") {
+				return nil
+			}
+			err = processFile(path)
+			if err != nil {
+				return err
 			}
 			return nil
 		})
@@ -102,3 +112,63 @@ func processLogDir(logDir string) {
 	}
 
 }
+
+
+func processFile(fname string) error {
+	// if _, err := os.Stat(fname); os.IsNotExist(err) {
+	// 	return errors.New(fmt.Sprintf("Failed to open log file: %s, skipping reading", fname))
+	// }
+
+	file, err := os.Open(fname)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %s, skipping reading", err)
+	}
+	defer file.Close()
+
+	stat, err := os.Stat(fname)
+	if err != nil {
+		return fmt.Errorf("error reading log file: %s, skipping reading", err)
+	}
+	start := int64(0)
+
+	if stat.Size() > 0 { //not empty file
+		buf := make([]byte, stat.Size())
+		_, err = file.ReadAt(buf, start)
+		if err == nil {
+			lines := strings.Split(strings.ReplaceAll(string(buf), "\r\n", "\n"), "\n")
+			parseLines(lines)
+		} else {
+			return fmt.Errorf("error when reading bytes from log file: %s", err)
+		}
+	}
+
+	file.Close()
+	return nil
+}
+
+func parseLines(lines []string) error{
+	s := ""
+	var err error = nil
+	// formatTimeStr := "2006-01-02 15:04:05.000"
+	for _, line := range lines {
+		s = line[0:23]
+		// s = strings.Replace(s, "T", " ", 1)
+		currentTime,err = time.Parse(time.RFC1123,s)
+		if err == nil {
+			if lastTime.IsZero() {
+				lastTime = currentTime
+				continue
+			}
+			if  lastTime.After(currentTime) {
+				return fmt.Errorf("error: log timestamp is out of order")
+			}
+			lastTime = currentTime
+		}else{
+			return err
+		}
+		
+	}
+	return err
+}
+
+ 
